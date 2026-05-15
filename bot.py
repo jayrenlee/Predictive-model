@@ -361,13 +361,13 @@ def handle(message: dict, data: dict):
         ]
 
         for rank, (num, score) in enumerate(preds, 1):
-            bar       = "█" * round(score * 10) + "░" * (10 - round(score * 10))
-            conf      = f"{score*100:.0f}%"
-            last_date = (date_map.get(num) or [None])[0]
-            if last_date:
+            bar   = "█" * round(score * 10) + "░" * (10 - round(score * 10))
+            conf  = f"{score*100:.0f}%"
+            dates = date_map.get(num, [])[:3]
+            if dates:
                 lines.append(
                     f"`{rank:>2}.` `{num}`  {bar}  *{conf}*\n"
-                    f"`       `_{last_date}_"
+                    f"      📅 _{' · '.join(dates)}_"
                 )
             else:
                 lines.append(f"`{rank:>2}.` `{num}`  {bar}  *{conf}*")
