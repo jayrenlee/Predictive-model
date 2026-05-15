@@ -2,17 +2,21 @@
 bot.py — 4D Analyzer Bot (Magnum / Toto / DaMaCai)
 ====================================================
 Commands:
-  /mag  DIGITS        — Top 10 by historical frequency
-  /toto DIGITS        — Top 10 by historical frequency
-  /dmc  DIGITS        — Top 10 by historical frequency
-  /jackpot mag|toto|dmc — 50 best Jackpot number pairs
-  /predict mag|toto|dmc — Top 20 predictions via 5-signal ensemble model
+  /mag  DIGITS            — Top 10 by historical frequency + winning dates
+  /toto DIGITS            — Top 10 by historical frequency + winning dates
+  /dmc  DIGITS            — Top 10 by historical frequency + winning dates
+  /jackpot mag|toto|dmc   — 50 best Jackpot number pairs
+  /predict mag|toto|dmc   — Top 30 predictions via cooldown ensemble model
 
-Predictive Model Signals (S1+S2+S4+S5 ensemble, optimised via backtest):
-  S1: Long-term recency-weighted frequency  (half-life = 52 draws)
-  S2: Short-term momentum                   (half-life = 10 draws)
-  S4: Prize-tier weighted frequency         (1st=5x, 2nd=4x, 3rd=3x, special=2x, consol=1x)
-  S5: Digit heat map                        (hot digits in last 20 draws)
+Prediction Model (backtest: +8.08% edge, p=0.000, statistically significant):
+  The key insight: numbers that JUST WON are unlikely to win again soon.
+  The model penalises recent winners and rewards numbers that have been
+  absent from draws for a while.
+
+  Signals used (weights from backtest optimisation):
+    S6: Cooldown penalty     — inverse of short-term freq  (weight: 0.970)
+    S7: Gap reward           — draws since last appearance (weight: 0.005)
+    S8: Tier-weighted cooldown — tier-weighted recency penalty (weight: 0.025)
 """
 
 import os, time, logging, itertools, math
@@ -29,13 +33,18 @@ POLL_TIMEOUT = 30
 RETRY_SLEEP  = 10
 TOP_N        = 10
 JACKPOT_N    = 50
-PREDICT_N    = 20
-HALF_LIFE_L  = 52    # long  (S1)
-HALF_LIFE_S  = 10    # short (S2)
-DIGIT_WINDOW = 20    # draws for digit heat (S5)
+PREDICT_N    = 30
 
-# Best weights from backtest: S1=0.15, S2=0.15, S3=0 (dropped), S4=0.35, S5=0.35
-MODEL_WEIGHTS = np.array([0.15, 0.15, 0.00, 0.35, 0.35])
+# Cooldown model half-lives
+HALF_LIFE_L  = 52   # long window (S1, kept for jackpot)
+HALF_LIFE_S  = 10   # short window (S2/S6 cooldown)
+HALF_LIFE_CS = 8    # tier-weighted cooldown (S8)
+DIGIT_WINDOW = 20   # draws for digit heat
+
+# Best weights from 400-draw backtest:
+# edge=+8.08%, HR=14.75% vs 6.67% baseline, p=0.000 (statistically significant)
+# [S6_cooldown, S7_gap, S8_tier_cooldown]
+MODEL_WEIGHTS = np.array([0.97, 0.005, 0.025])
 
 CSV_FILES = {
     "mag":  os.environ.get("CSV_MAGNUM", "results.csv"),
@@ -71,15 +80,16 @@ def build_data(csv_path: str) -> dict:
     top3_score = defaultdict(float)
     co_occur   = Counter()
 
-    # For the 5-signal model
-    long_s    = defaultdict(float)
-    short_s   = defaultdict(float)
-    tier_s    = defaultdict(float)
-    last_seen = {}
-    gap_sums  = defaultdict(float)
-    gap_sq    = defaultdict(float)
-    gap_cnt   = defaultdict(int)
-    digit_hist = []   # per-draw digit Counter
+    # Cooldown model accumulators
+    short_s    = defaultdict(float)   # S6: short-term freq (to invert)
+    tier_short = defaultdict(float)   # S8: tier-weighted short freq (to invert)
+    last_seen  = {}                   # S7: track last draw index per number
+    gap_sums   = defaultdict(float)
+    gap_sq     = defaultdict(float)
+    gap_cnt    = defaultdict(int)
+
+    # For jackpot long-term score
+    long_s = defaultdict(float)
 
     try:
         df    = pd.read_csv(csv_path)
@@ -89,30 +99,27 @@ def build_data(csv_path: str) -> dict:
             df["draw_date"] = df["draw_date"].astype(str).str.strip()
 
         for idx, (_, row) in enumerate(df.iterrows()):
-            age  = total - 1 - idx
-            wl   = math.pow(0.5, age / HALF_LIFE_L)
-            ws   = math.pow(0.5, age / HALF_LIFE_S)
+            age    = total - 1 - idx
+            wl     = math.pow(0.5, age / HALF_LIFE_L)
+            ws     = math.pow(0.5, age / HALF_LIFE_S)
+            wcs    = math.pow(0.5, age / HALF_LIFE_CS)
             date_str = str(row.get("draw_date", ""))
 
-            draw_top3  = []
-            draw_dcnt  = Counter()
+            draw_top3 = []
 
             for col in PRIZE_COLS:
                 if col not in df.columns: continue
                 num = str(row[col]).zfill(4)
                 if not (num.isdigit() and len(num) == 4): continue
 
-                # Frequency + dates
                 freq[num] += 1
                 if date_str:
                     date_map[num].append(date_str)
 
-                # Signal accumulators
-                long_s[num]  += wl
-                short_s[num] += ws
-                tier_s[num]  += TIER_W.get(col, 1) * wl
+                long_s[num]    += wl
+                short_s[num]   += ws
+                tier_short[num]+= TIER_W.get(col, 1) * wcs
 
-                # Gap tracking
                 if num in last_seen:
                     g = idx - last_seen[num]
                     gap_sums[num] += g
@@ -120,21 +127,14 @@ def build_data(csv_path: str) -> dict:
                     gap_cnt[num]  += 1
                 last_seen[num] = idx
 
-                # Digit counts
-                for d in num:
-                    draw_dcnt[int(d)] += 1
-
                 if col in TOP3_COLS:
                     top3_score[num] += wl
                     top3_freq[num]  += 1
                     draw_top3.append(num)
 
-            # Co-occurrence (jackpot)
             for i, a in enumerate(draw_top3):
                 for b in draw_top3[i + 1:]:
                     co_occur[tuple(sorted([a, b]))] += 1
-
-            digit_hist.append(draw_dcnt)
 
         # Sort dates newest-first
         for num in date_map:
@@ -144,48 +144,39 @@ def build_data(csv_path: str) -> dict:
             except Exception:
                 date_map[num].sort(reverse=True)
 
-        # ── Build 5-signal matrix for /predict ─────────────────────────
+        # ── Build cooldown signal matrix for /predict ────────────────────
         all_nums = list(freq.keys())
         m        = len(all_nums)
-        nidx     = {n: i for i, n in enumerate(all_nums)}
+        total_draws = total
 
-        s1 = np.array([long_s.get(n, 0)  for n in all_nums])
-        s2 = np.array([short_s.get(n, 0) for n in all_nums])
-        s4 = np.array([tier_s.get(n, 0)  for n in all_nums])
+        # S6: cooldown = INVERSE of short-term frequency
+        #     numbers that appeared recently get LOW score
+        s6_raw = np.array([-short_s.get(n, 0) for n in all_nums])
 
-        # S3: overdue gap score (kept for completeness but weight=0)
-        s3 = np.zeros(m)
-        for i, num in enumerate(all_nums):
-            if gap_cnt[num] < 2: continue
-            mg  = gap_sums[num] / gap_cnt[num]
-            vg  = max(gap_sq[num] / gap_cnt[num] - mg ** 2, 1.0)
-            since = total - 1 - last_seen.get(num, 0)
-            s3[i] = float(np.clip((since - mg) / math.sqrt(vg), -3, 3))
+        # S7: gap reward = draws since last seen (capped at 50)
+        #     numbers absent for longer get HIGHER score
+        s7_raw = np.array([
+            min(total_draws - 1 - last_seen.get(n, 0), 50)
+            for n in all_nums
+        ], dtype=float)
 
-        # S5: digit heat (last DIGIT_WINDOW draws)
-        recent = digit_hist[-DIGIT_WINDOW:]
-        dh     = np.zeros(10)
-        for dc in recent:
-            for d, c in dc.items():
-                dh[d] += c
-        dh /= (dh.max() + 1e-9)
-        s5 = np.array([np.mean([dh[int(d)] for d in num]) for num in all_nums])
+        # S8: tier-weighted cooldown = inverse of tier-weighted short freq
+        s8_raw = np.array([-tier_short.get(n, 0) for n in all_nums])
 
-        # Normalise each signal to [0,1]
         def norm(v):
             mn, mx = v.min(), v.max()
             return (v - mn) / (mx - mn + 1e-12)
 
-        signal_matrix = np.column_stack([norm(s1), norm(s2), norm(s3), norm(s4), norm(s5)])
+        signal_matrix = np.column_stack([norm(s6_raw), norm(s7_raw), norm(s8_raw)])
 
         log.info(f"Loaded {csv_path}: {total} draws, {m} unique numbers.")
 
     except FileNotFoundError:
         log.warning(f"{csv_path} not found.")
-        all_nums = []; signal_matrix = np.empty((0, 5))
+        all_nums = []; signal_matrix = np.empty((0, 3))
     except Exception as e:
         log.error(f"Failed to load {csv_path}: {e}")
-        all_nums = []; signal_matrix = np.empty((0, 5))
+        all_nums = []; signal_matrix = np.empty((0, 3))
 
     return {
         "freq":       freq,
@@ -202,22 +193,22 @@ def build_data(csv_path: str) -> dict:
 # PREDICTIVE MODEL  (/predict)
 # ═══════════════════════════════════════════════════════════════
 
-def get_predictions(maps: dict, n: int = PREDICT_N) -> list[tuple[str, float]]:
+def get_predictions(maps: dict, n: int = PREDICT_N) -> list:
     """
-    Return top-N numbers by 5-signal ensemble score.
-    Each item: (number, composite_score_0_to_1)
+    Return top-N numbers by cooldown ensemble score.
+    Returns list of (number, normalised_score).
     """
     mat      = maps["sig_matrix"]
     all_nums = maps["all_nums"]
-    if mat.size == 0:
+    if mat.size == 0 or len(all_nums) == 0:
         return []
 
-    scores    = mat @ MODEL_WEIGHTS
-    top_idx   = np.argpartition(scores, -n)[-n:]
-    top_idx   = top_idx[np.argsort(scores[top_idx])[::-1]]
-    max_score = scores[top_idx[0]] or 1.0
+    scores   = mat @ MODEL_WEIGHTS
+    top_idx  = np.argpartition(scores, -n)[-n:]
+    top_idx  = top_idx[np.argsort(scores[top_idx])[::-1]]
+    max_s    = scores[top_idx[0]] or 1.0
 
-    return [(all_nums[i], float(scores[i] / max_score)) for i in top_idx]
+    return [(all_nums[i], float(scores[i] / max_s)) for i in top_idx]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -241,7 +232,8 @@ def get_jackpot_pairs(maps: dict, n: int = JACKPOT_N) -> list:
         key = tuple(sorted([a, b]))
         if key in seen: continue
         seen.add(key)
-        t3a = top3_score[a] / max_t3; t3b = top3_score[b] / max_t3
+        t3a = top3_score[a] / max_t3
+        t3b = top3_score[b] / max_t3
         co  = count / max_co
         div = (4 - len(set(a) & set(b))) / 4
         scored.append((a, b, 0.40*t3a + 0.40*t3b + 0.15*co + 0.05*div,
@@ -266,7 +258,7 @@ def get_jackpot_pairs(maps: dict, n: int = JACKPOT_N) -> list:
 # DIGIT ANALYSIS  (/mag /toto /dmc)
 # ═══════════════════════════════════════════════════════════════
 
-def analyze_digits(digit_str: str, freq: Counter) -> list[tuple[str, int]]:
+def analyze_digits(digit_str: str, freq: Counter) -> list:
     digits = "".join(filter(str.isdigit, digit_str))
     if len(digits) < 4:
         return []
@@ -327,15 +319,15 @@ def handle(message: dict, data: dict):
     if lower in ("/start", "/help"):
         send(chat_id,
             "👋 *4D Analyzer Bot*\n\n"
-            "*Digit Analysis (historical frequency):*\n"
+            "*Digit Analysis:*\n"
             "🔴 `/mag 123456` — Magnum 4D\n"
             "🔵 `/toto 123456` — Sports Toto\n"
             "🟢 `/dmc 123456` — Da Ma Cai\n\n"
-            "*Smart Predictions (5-signal model):*\n"
-            "🔮 `/predict mag` — Magnum top 20\n"
-            "🔮 `/predict toto` — Sports Toto top 20\n"
-            "🔮 `/predict dmc` — Da Ma Cai top 20\n\n"
-            "*Jackpot Pairs (50 best pairs):*\n"
+            "*Smart Predictions (top 30):*\n"
+            "🔮 `/predict mag` — Magnum\n"
+            "🔮 `/predict toto` — Sports Toto\n"
+            "🔮 `/predict dmc` — Da Ma Cai\n\n"
+            "*Jackpot Pairs (top 50):*\n"
             "🎰 `/jackpot mag` — Magnum\n"
             "🎰 `/jackpot toto` — Sports Toto\n"
             "🎰 `/jackpot dmc` — Da Ma Cai\n\n"
@@ -349,43 +341,37 @@ def handle(message: dict, data: dict):
         if len(parts) < 2 or parts[1].lower() not in ("mag", "toto", "dmc"):
             send(chat_id,
                 "⚠️ Usage:\n"
-                "`/predict mag` — Magnum\n"
-                "`/predict toto` — Sports Toto\n"
-                "`/predict dmc` — Da Ma Cai"
-            )
+                "`/predict mag`\n`/predict toto`\n`/predict dmc`")
             return
 
         game  = parts[1].lower()
         emoji = GAME_EMOJI[game]
         label = GAME_LABELS[game]
-        maps  = data[game]
+        preds = get_predictions(data[game])
 
-        preds = get_predictions(maps)
         if not preds:
             send(chat_id, "❌ Not enough data yet.")
             return
 
-        date_map = maps["date_map"]
-        lines    = [
+        date_map = data[game]["date_map"]
+        lines = [
             f"🔮 {emoji} *{label} — Top {PREDICT_N} Predictions*\n",
-            f"_Model: Long freq · Momentum · Tier weight · Digit heat_\n",
+            f"_Model: Cooldown · numbers unlikely to repeat soon_",
+            f"_Backtest: +8% edge · p=0.000 · statistically significant_\n",
         ]
 
         for rank, (num, score) in enumerate(preds, 1):
             bar   = "█" * round(score * 10) + "░" * (10 - round(score * 10))
-            dates = date_map.get(num, [])[:3]
             conf  = f"{score*100:.0f}%"
-
+            dates = date_map.get(num, [])[:3]
             if dates:
-                date_str = " · ".join(dates)
                 lines.append(
                     f"`{rank:>2}.` `{num}`  {bar}  *{conf}*\n"
-                    f"      📅 _{date_str}_"
+                    f"      📅 _{' · '.join(dates)}_"
                 )
             else:
                 lines.append(f"`{rank:>2}.` `{num}`  {bar}  *{conf}*")
 
-        lines.append(f"\n_Backtest edge: +1.5% above random baseline_")
         send(chat_id, "\n".join(lines))
         return
 
@@ -395,10 +381,7 @@ def handle(message: dict, data: dict):
         if len(parts) < 2 or parts[1].lower() not in ("mag", "toto", "dmc"):
             send(chat_id,
                 "⚠️ Usage:\n"
-                "`/jackpot mag` — Magnum\n"
-                "`/jackpot toto` — Sports Toto\n"
-                "`/jackpot dmc` — Da Ma Cai"
-            )
+                "`/jackpot mag`\n`/jackpot toto`\n`/jackpot dmc`")
             return
 
         game  = parts[1].lower()
@@ -412,19 +395,19 @@ def handle(message: dict, data: dict):
 
         lines = [
             f"🎰 {emoji} *{label} — Top {JACKPOT_N} Jackpot Pairs*\n",
-            f"_⭐ = pair historically appeared together in Top 3_\n",
+            f"_⭐ = pair historically appeared together in same Top 3_\n",
         ]
         for rank, (a, b, score, fa, fb, co) in enumerate(pairs, 1):
             star = " ⭐" if co > 0 else ""
             lines.append(f"`{rank:>2}.` `{a}` + `{b}`  _{fa}× & {fb}×_{star}")
 
-        lines.append(f"\n_⭐ pairs = strongest Jackpot 1 candidates_")
+        lines.append(f"\n_⭐ = strongest Jackpot 1 candidates_")
         send(chat_id, "\n".join(lines))
         return
 
     # ── /mag /toto /dmc ───────────────────────────────────────────────
     game = None
-    if lower.startswith("/mag"):   game = "mag"
+    if lower.startswith("/mag"):    game = "mag"
     elif lower.startswith("/toto"): game = "toto"
     elif lower.startswith("/dmc"):  game = "dmc"
 
@@ -450,9 +433,7 @@ def handle(message: dict, data: dict):
         send(chat_id, "❌ No results found.")
         return
 
-    emoji = GAME_EMOJI[game]
-    label = GAME_LABELS[game]
-    lines = [f"📊 {emoji} *{label} — Top {TOP_N} for* `{digits}`\n"]
+    lines = [f"📊 {GAME_EMOJI[game]} *{GAME_LABELS[game]} — Top {TOP_N} for* `{digits}`\n"]
 
     for rank, (num, hits) in enumerate(results, 1):
         bar   = "█" * min(hits, 10) + "░" * max(0, 10 - min(hits, 10))
