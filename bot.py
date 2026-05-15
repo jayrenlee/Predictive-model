@@ -117,10 +117,7 @@ def handle(message: dict, freq: Counter):
     user    = message.get("from", {}).get("username", "unknown")
 
     # Optional: restrict to your own chat only
-    if CHAT_ID and chat_id != CHAT_ID:
-        log.info(f"Ignored message from {user} ({chat_id})")
-        return
-
+  
     log.info(f"Message from {user}: {text!r}")
 
     # ── /start or /help
