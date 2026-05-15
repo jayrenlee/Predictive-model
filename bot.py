@@ -6,7 +6,7 @@ Commands:
   /toto DIGITS  — analyze against Sports Toto history
   /dmc  DIGITS  — analyze against Da Ma Cai history
 
-Deploy as a Railway Background Worker.
+Shows top 10 numbers with hit count + last 3 winning dates.
 """
 
 import os
@@ -15,7 +15,7 @@ import logging
 import itertools
 import requests
 import pandas as pd
-from collections import Counter
+from collections import Counter, defaultdict
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ TOKEN        = os.environ.get("TELEGRAM_TOKEN", "")
 POLL_TIMEOUT = 30
 RETRY_SLEEP  = 10
 TOP_N        = 10
+MAX_DATES    = 3   # how many recent winning dates to show
 
 CSV_FILES = {
     "mag":  os.environ.get("CSV_MAGNUM", "results.csv"),
@@ -50,28 +51,52 @@ PRIZE_COLS = (
 )
 
 
-def build_freq_map(csv_path: str) -> Counter:
+def build_maps(csv_path: str) -> tuple[Counter, dict]:
+    """
+    Returns:
+      freq     — Counter: number → total hit count
+      date_map — dict:    number → sorted list of winning dates (newest first)
+    """
+    freq     = Counter()
+    date_map = defaultdict(list)
+
     try:
         df = pd.read_csv(csv_path)
-        numbers = []
-        for col in PRIZE_COLS:
-            if col in df.columns:
-                numbers.extend(df[col].astype(str).str.zfill(4).tolist())
-        freq = Counter(numbers)
+
+        # Normalise draw_date to DD/MM/YYYY string
+        if "draw_date" in df.columns:
+            df["draw_date"] = df["draw_date"].astype(str).str.strip()
+
+        for _, row in df.iterrows():
+            date_str = row.get("draw_date", "")
+            for col in PRIZE_COLS:
+                if col in df.columns:
+                    num = str(row[col]).zfill(4)
+                    if num.isdigit() and len(num) == 4:
+                        freq[num] += 1
+                        if date_str:
+                            date_map[num].append(date_str)
+
+        # Sort each number's dates newest-first
+        for num in date_map:
+            try:
+                date_map[num].sort(
+                    key=lambda d: pd.to_datetime(d, dayfirst=True),
+                    reverse=True
+                )
+            except Exception:
+                date_map[num].sort(reverse=True)
+
         log.info(f"Loaded {csv_path}: {len(df)} draws, {len(freq)} unique numbers.")
-        return freq
     except FileNotFoundError:
         log.warning(f"{csv_path} not found — will be empty until first scrape.")
-        return Counter()
     except Exception as e:
         log.error(f"Failed to load {csv_path}: {e}")
-        return Counter()
+
+    return freq, dict(date_map)
 
 
-def analyze(digit_string: str, freq: Counter) -> list[tuple[str, int]]:
-    digits = "".join(filter(str.isdigit, digit_string))
-    if len(digits) < 4:
-        return []
+def analyze(digits: str, freq: Counter) -> list[tuple[str, int]]:
     candidates: set[str] = set()
     for combo in itertools.combinations(digits, 4):
         for perm in itertools.permutations(combo):
@@ -110,7 +135,7 @@ def get_updates(offset: int) -> list[dict]:
         return []
 
 
-def handle(message: dict, freq_maps: dict):
+def handle(message: dict, data: dict):
     chat_id = str(message.get("chat", {}).get("id", ""))
     text    = message.get("text", "").strip()
     user    = message.get("from", {}).get("username", "unknown")
@@ -126,11 +151,10 @@ def handle(message: dict, freq_maps: dict):
             "🔵 `/toto 123456` — Sports Toto\n"
             "🟢 `/dmc 123456` — Da Ma Cai\n\n"
             "_Minimum 4 digits, maximum 12 digits._\n"
-            "_I'll return the Top 10 numbers by historical frequency._"
+            "_Returns Top 10 numbers with hit count and winning dates._"
         )
         return
 
-    # detect game
     game = None
     if lower.startswith("/mag"):
         game = "mag"
@@ -159,8 +183,9 @@ def handle(message: dict, freq_maps: dict):
         send(chat_id, "⚠️ Too many digits — keep it to *12 or fewer*.")
         return
 
-    freq    = freq_maps[game]
-    results = analyze(digits, freq)
+    freq     = data[game]["freq"]
+    date_map = data[game]["date_map"]
+    results  = analyze(digits, freq)
 
     if not results:
         send(chat_id, "❌ No results found. Try a different set of digits.")
@@ -171,8 +196,14 @@ def handle(message: dict, freq_maps: dict):
     lines = [f"📊 {emoji} *{label} — Top {TOP_N} for* `{digits}`\n"]
 
     for rank, (num, hits) in enumerate(results, 1):
-        bar = "█" * min(hits, 10) + "░" * max(0, 10 - min(hits, 10))
-        lines.append(f"`{rank:>2}.` `{num}`  {bar}  {hits} hits")
+        bar   = "█" * min(hits, 10) + "░" * max(0, 10 - min(hits, 10))
+        dates = date_map.get(num, [])[:MAX_DATES]
+
+        if dates:
+            date_str = " · ".join(dates)
+            lines.append(f"`{rank:>2}.` `{num}`  {bar}  *{hits} hits*\n      📅 _{date_str}_")
+        else:
+            lines.append(f"`{rank:>2}.` `{num}`  {bar}  *{hits} hits*")
 
     lines.append(f"\n_Analyzed from {len(freq):,} historical winning numbers_")
     send(chat_id, "\n".join(lines))
@@ -183,7 +214,12 @@ def main():
         raise RuntimeError("TELEGRAM_TOKEN environment variable is not set.")
 
     log.info("Bot starting...")
-    freq_maps = {game: build_freq_map(path) for game, path in CSV_FILES.items()}
+
+    # Load freq + date maps for all three games
+    data = {}
+    for game, path in CSV_FILES.items():
+        freq, date_map = build_maps(path)
+        data[game] = {"freq": freq, "date_map": date_map}
 
     last_update_id = 0
     log.info("Listening for messages...")
@@ -194,7 +230,7 @@ def main():
             for update in updates:
                 last_update_id = update["update_id"]
                 if "message" in update:
-                    handle(update["message"], freq_maps)
+                    handle(update["message"], data)
         except KeyboardInterrupt:
             log.info("Stopped.")
             break
