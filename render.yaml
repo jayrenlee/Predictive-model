@@ -1,0 +1,17 @@
+# render.yaml
+# Drop this in your GitHub repo root.
+# Render will auto-detect it and configure the service.
+
+services:
+  - type: worker
+    name: magnum-4d-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false        # set manually in Render dashboard (keeps it secret)
+      - key: CHAT_ID
+        sync: false        # your Telegram user ID
+      - key: CSV_PATH
+        value: results.csv
