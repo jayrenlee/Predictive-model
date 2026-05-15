@@ -32,7 +32,7 @@ TOKEN        = os.environ.get("TELEGRAM_TOKEN", "")
 POLL_TIMEOUT = 30
 RETRY_SLEEP  = 10
 TOP_N        = 10
-JACKPOT_N    = 50
+JACKPOT_N    = 20
 PREDICT_N    = 30
 
 # Cooldown model half-lives
@@ -216,42 +216,35 @@ def get_predictions(maps: dict, n: int = PREDICT_N) -> list:
 # ═══════════════════════════════════════════════════════════════
 
 def get_jackpot_pairs(maps: dict, n: int = JACKPOT_N) -> list:
-    top3_score = maps["top3_score"]
-    top3_freq  = maps["top3_freq"]
-    co_occur   = maps["co_occur"]
-    if not top3_score:
+    """
+    Get top-N Jackpot 1 pairs by:
+    1. Running the cooldown prediction model to get top 30 numbers
+    2. Generating all C(30,2)=435 pairs from those numbers
+    3. Scoring each pair: 40% predict_score_A + 40% predict_score_B
+                        + 15% historical co-occurrence bonus
+                        + 5% digit diversity bonus
+    """
+    co_occur  = maps["co_occur"]
+    top3_freq = maps["top3_freq"]
+
+    # Get top 30 predicted numbers with their normalised scores
+    preds = get_predictions(maps, n=30)
+    if not preds:
         return []
 
-    max_t3 = max(top3_score.values()) or 1
-    cands  = sorted(top3_score, key=top3_score.get, reverse=True)[:50]
     max_co = max(co_occur.values()) if co_occur else 1
-    seen, scored = set(), []
 
-    for (a, b), count in co_occur.most_common():
-        if a not in top3_score or b not in top3_score: continue
-        key = tuple(sorted([a, b]))
-        if key in seen: continue
-        seen.add(key)
-        t3a = top3_score[a] / max_t3
-        t3b = top3_score[b] / max_t3
-        co  = count / max_co
-        div = (4 - len(set(a) & set(b))) / 4
-        scored.append((a, b, 0.40*t3a + 0.40*t3b + 0.15*co + 0.05*div,
-                       top3_freq[a], top3_freq[b], count))
-
-    for i, a in enumerate(cands):
-        for b in cands[i + 1:]:
+    pairs = []
+    for i, (a, pa) in enumerate(preds):
+        for b, pb in preds[i + 1:]:
             key = tuple(sorted([a, b]))
-            if key in seen: continue
-            seen.add(key)
-            t3a = top3_score.get(a, 0) / max_t3
-            t3b = top3_score.get(b, 0) / max_t3
+            co  = co_occur.get(key, 0) / max_co
             div = (4 - len(set(a) & set(b))) / 4
-            scored.append((a, b, 0.40*t3a + 0.40*t3b + 0.05*div,
-                           top3_freq[a], top3_freq[b], 0))
+            s   = 0.40*pa + 0.40*pb + 0.15*co + 0.05*div
+            pairs.append((a, b, s, top3_freq.get(a, 0), top3_freq.get(b, 0), co_occur.get(key, 0)))
 
-    scored.sort(key=lambda x: x[2], reverse=True)
-    return scored[:n]
+    pairs.sort(key=lambda x: x[2], reverse=True)
+    return pairs[:n]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -327,7 +320,7 @@ def handle(message: dict, data: dict):
             "🔮 `/predict mag` — Magnum\n"
             "🔮 `/predict toto` — Sports Toto\n"
             "🔮 `/predict dmc` — Da Ma Cai\n\n"
-            "*Jackpot Pairs (top 50):*\n"
+            "*Jackpot Pairs (top 20):*\n"
             "🎰 `/jackpot mag` — Magnum\n"
             "🎰 `/jackpot toto` — Sports Toto\n"
             "🎰 `/jackpot dmc` — Da Ma Cai\n\n"
@@ -361,13 +354,13 @@ def handle(message: dict, data: dict):
         ]
 
         for rank, (num, score) in enumerate(preds, 1):
-            bar   = "█" * round(score * 10) + "░" * (10 - round(score * 10))
-            conf  = f"{score*100:.0f}%"
-            dates = date_map.get(num, [])[:3]
-            if dates:
+            bar       = "█" * round(score * 10) + "░" * (10 - round(score * 10))
+            conf      = f"{score*100:.0f}%"
+            last_date = (date_map.get(num) or [None])[0]
+            if last_date:
                 lines.append(
                     f"`{rank:>2}.` `{num}`  {bar}  *{conf}*\n"
-                    f"      📅 _{' · '.join(dates)}_"
+                    f"`       `_{last_date}_"
                 )
             else:
                 lines.append(f"`{rank:>2}.` `{num}`  {bar}  *{conf}*")
@@ -394,14 +387,14 @@ def handle(message: dict, data: dict):
             return
 
         lines = [
-            f"🎰 {emoji} *{label} — Top {JACKPOT_N} Jackpot Pairs*\n",
-            f"_⭐ = pair historically appeared together in same Top 3_\n",
+            f"🎰 {emoji} *{label} — Top {JACKPOT_N} Jackpot 1 Pairs*\n",
+            f"_Built from top 30 predicted numbers · ⭐ = historical co-occurrence_\n",
         ]
         for rank, (a, b, score, fa, fb, co) in enumerate(pairs, 1):
             star = " ⭐" if co > 0 else ""
-            lines.append(f"`{rank:>2}.` `{a}` + `{b}`  _{fa}× & {fb}×_{star}")
+            lines.append(f"`{rank:>2}.` `{a}` + `{b}`{star}")
 
-        lines.append(f"\n_⭐ = strongest Jackpot 1 candidates_")
+        lines.append(f"\n_⭐ = pair appeared together in Top 3 before_")
         send(chat_id, "\n".join(lines))
         return
 
