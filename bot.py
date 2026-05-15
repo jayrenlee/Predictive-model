@@ -24,7 +24,7 @@ TOKEN        = os.environ.get("TELEGRAM_TOKEN", "")
 POLL_TIMEOUT = 30
 RETRY_SLEEP  = 10
 TOP_N        = 10
-MAX_DATES    = 3   # how many recent winning dates to show
+MAX_DATES    = 2   # how many recent winning dates to show
 
 CSV_FILES = {
     "mag":  os.environ.get("CSV_MAGNUM", "results.csv"),
