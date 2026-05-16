@@ -2,3 +2,6 @@ pandas
 requests
 beautifulsoup4
 numpy
+anthropic
+python-docx
+rich
