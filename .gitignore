@@ -1,0 +1,9 @@
+# Arcads credentials — never commit
+.env
+
+# Generated output
+output/
+logs/
+
+# Temp files
+*.tmp
