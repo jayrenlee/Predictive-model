@@ -54,7 +54,7 @@ TRIGRAMS = {
     'Kun':  {'symbol': '☷', 'name': 'Earth',    'element': 'Earth',  'digits': [2, 7]},
     'Zhen': {'symbol': '☳', 'name': 'Thunder',  'element': 'Wood',   'digits': [3, 8]},
     'Kan':  {'symbol': '☵', 'name': 'Water',    'element': 'Water',  'digits': [4, 9]},
-    'Gen':  {'symbol': '☶', 'name': 'Mountain', 'element': 'Earth',  'digits': [5, 0]},
+    'Gen':  {'symbol': '☶', 'name': 'Mountain', 'element': 'Earth',  'digits': [5, 8, 0]},
     'Xun':  {'symbol': '☴', 'name': 'Wind',     'element': 'Wood',   'digits': [1, 6]},
     'Li':   {'symbol': '☲', 'name': 'Fire',     'element': 'Fire',   'digits': [2, 7]},
     'Dui':  {'symbol': '☱', 'name': 'Lake',     'element': 'Metal',  'digits': [3, 8]},
@@ -211,7 +211,7 @@ GEO_SYMBOLS = ["♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒"
 
 GEO_SIGN_DIGITS = {
     "Aries":       [9,1,8], "Taurus":      [6,4,2], "Gemini":   [5,3,8],
-    "Cancer":      [2,7,6], "Leo":         [1,4,9], "Virgo":    [5,3,6],
+    "Cancer":      [2,7,6,0], "Leo":         [1,4,9], "Virgo":    [5,3,6],
     "Libra":       [6,4,8], "Scorpio":     [9,2,4], "Sagittarius":[3,6,9],
     "Capricorn":   [8,4,1], "Aquarius":    [4,8,7], "Pisces":   [7,2,3],
 }
@@ -268,7 +268,7 @@ def get_geodetic_info(today: date, lon: float = 101.7136) -> dict:
             active_aspects.append(f"🌙 Moon on Penang {ang_name}")
 
     # Digit pool: natal Cancer + Sun sign + Moon sign
-    natal_digits = GEO_SIGN_DIGITS["Cancer"]  # 101.7136° = 11.7° Cancer
+    natal_digits = GEO_SIGN_DIGITS["Cancer"]  # 101.7136° = 11.7° Cancer (incl. 0 = primordial void)
     sun_digits   = GEO_SIGN_DIGITS[sun_sign]
     moon_digits  = GEO_SIGN_DIGITS[moon_sign]
     combined     = sorted(set(natal_digits + sun_digits + moon_digits))
