@@ -18,8 +18,8 @@ Prediction Model (backtest: +8.08% edge, p=0.000, statistically significant):
     S8: Tier-weighted cooldown — tier-weighted recency penalty (weight: 0.025)
 """
 
-import os, time, logging, itertools, math, hashlib
-from datetime import date
+import os, time, logging, itertools, math, hashlib, threading, subprocess
+from datetime import date, datetime
 import numpy as np
 import requests
 import pandas as pd
@@ -850,6 +850,72 @@ def handle(message: dict, data: dict):
     send(chat_id, "\n".join(lines))
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# AUTO-SCRAPER + DATA RELOADER
+# ═══════════════════════════════════════════════════════════════
+
+def auto_scrape_loop(data: dict, token: str):
+    """
+    Background thread: runs scraper.py on draw nights (Wed/Sat/Sun)
+    after 8pm MYT, then reloads all CSV data into memory.
+    Sends a Telegram notification when new data is loaded.
+    """
+    import pytz
+    scraped_dates = set()
+    myt = pytz.timezone("Asia/Kuala_Lumpur")
+    log.info("Auto-scraper started.")
+
+    while True:
+        try:
+            now = datetime.now(myt)
+            today_key = now.strftime("%Y-%m-%d")
+
+            if (now.weekday() in DRAW_DAYS
+                    and now.hour >= SCRAPE_AFTER
+                    and today_key not in scraped_dates):
+
+                log.info(f"Draw night detected ({now.strftime('%A %d %b')}). Running scraper...")
+                result = subprocess.run(
+                    ["python", "scraper.py"],
+                    capture_output=True, text=True, timeout=60
+                )
+                log.info(f"Scraper output: {result.stdout.strip()}")
+                scraped_dates.add(today_key)
+
+                # Reload all CSVs into memory
+                log.info("Reloading data after scrape...")
+                for game, path in CSV_FILES.items():
+                    data[game] = build_data(path)
+                log.info("Data reload complete.")
+
+                # Notify via Telegram if token available
+                if token:
+                    try:
+                        draws = {
+                            "mag":  len(data["mag"]["freq"]),
+                            "toto": len(data["toto"]["freq"]),
+                            "dmc":  len(data["dmc"]["freq"]),
+                        }
+                        msg = (
+                            f"🔄 *Results updated — {now.strftime('%d %b %Y')}*\n\n"
+                            f"🔴 Magnum: {data['mag']['freq'] and 'loaded' or 'no data'}\n"
+                            f"🔵 Toto: {data['toto']['freq'] and 'loaded' or 'no data'}\n"
+                            f"🟢 DMC: {data['dmc']['freq'] and 'loaded' or 'no data'}\n\n"
+                            f"_Bot predictions refreshed with latest draw_"
+                        )
+                        url = f"https://api.telegram.org/bot{token}/sendMessage"
+                        chat = os.environ.get("NOTIFY_CHAT_ID", os.environ.get("CHAT_ID",""))
+                        if chat:
+                            requests.post(url, json={"chat_id":chat,"text":msg,"parse_mode":"Markdown"}, timeout=10)
+                    except Exception as e:
+                        log.warning(f"Notification failed: {e}")
+
+        except Exception as e:
+            log.error(f"Scheduler error: {e}")
+
+        time.sleep(SCRAPE_CHECK)
+
 # ═══════════════════════════════════════════════════════════════
 # MAIN LOOP
 # ═══════════════════════════════════════════════════════════════
@@ -860,7 +926,12 @@ def main():
 
     log.info("Bot starting — loading data...")
     data = {game: build_data(path) for game, path in CSV_FILES.items()}
-    log.info("All data loaded. Listening for messages...")
+    log.info("All data loaded. Starting auto-scraper thread...")
+    scraper_thread = threading.Thread(
+        target=auto_scrape_loop, args=(data, TOKEN), daemon=True
+    )
+    scraper_thread.start()
+    log.info("Listening for messages...")
 
     last_update_id = 0
     while True:
