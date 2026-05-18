@@ -19,6 +19,8 @@ Prediction Model (backtest: +8.08% edge, p=0.000, statistically significant):
 """
 
 import os, time, logging, itertools, math, hashlib, threading, subprocess
+import pytz
+_MYT = pytz.timezone("Asia/Kuala_Lumpur")
 from datetime import date, datetime
 import numpy as np
 import requests
@@ -150,7 +152,7 @@ HEXAGRAM_DATA = [
 
 def get_daily_hexagram(target_date=None):
     """Return deterministic hexagram number (1-64) for a given date."""
-    d = target_date or date.today()
+    d = target_date or datetime.now(_MYT).date()
     seed = int(hashlib.md5(str(d).encode()).hexdigest(), 16)
     return (seed % 64) + 1  # 1-64
 
@@ -572,7 +574,7 @@ def handle(message: dict, data: dict):
         emoji = GAME_EMOJI[game]
         label = GAME_LABELS[game]
 
-        today    = date.today()
+        today    = datetime.now(_MYT).date()
         loc      = DRAW_LOCATIONS[game]
         geo      = get_geodetic_info(today, loc["lon"])
         preds    = get_predictions(data[game], n=88)
@@ -637,7 +639,7 @@ def handle(message: dict, data: dict):
         emoji = GAME_EMOJI[game]
         label = GAME_LABELS[game]
 
-        today     = date.today()
+        today     = datetime.now(_MYT).date()
         loc       = DRAW_LOCATIONS[game]
         geo       = get_geodetic_info(today, loc["lon"])
         hex_num   = get_daily_hexagram()
@@ -720,7 +722,7 @@ def handle(message: dict, data: dict):
 
         filtered = filter_by_ching(preds, info['digits'])
 
-        today_str = date.today().strftime("%d %b %Y")
+        today_str = datetime.now(_MYT).date().strftime("%d %b %Y")
         lines = [
             f"🔯 *I-Ching Daily Reading — {today_str}*\n",
             f"*Hexagram #{info['num']}* {info['symbol']}",
@@ -861,9 +863,8 @@ def auto_scrape_loop(data: dict, token: str):
     after 8pm MYT, then reloads all CSV data into memory.
     Sends a Telegram notification when new data is loaded.
     """
-    import pytz
     scraped_dates = set()
-    myt = pytz.timezone("Asia/Kuala_Lumpur")
+    myt = _MYT
     log.info("Auto-scraper started.")
 
     while True:
