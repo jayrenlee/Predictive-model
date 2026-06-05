@@ -725,14 +725,11 @@ def handle(message: dict, data: dict):
         today_str = today.strftime("%d %b %Y")
         lines = [
             f"🌟 *Lucky Filter — {today_str}*\n",
-            f"🌍 *Geodetic ({loc['name']}):*",
-            f"   UDN {geo['udn']} ({geo['udn_group']}) → active digits *{active_geo}*",
-            f"   ☀️ Sun {geo['sun_deg']}° {geo['sun_sign']} {geo['sun_sym']} "
-            f"(H{geo['sun_house']}) → *{', '.join(str(d) for d in geo['sun_digits'])}*",
-            f"   🌙 Moon {geo['moon_deg']}° {geo['moon_sign']} {geo['moon_sym']} "
-            f"(H{geo['moon_house']}) → *{', '.join(str(d) for d in geo['moon_digits'])}*",
-            f"   ♋ Natal Cancer → *{', '.join(str(d) for d in geo['natal_digits'])}*",
-            f"   Combined → *{', '.join(str(d) for d in geo['combined'])}*",
+            f"🌍 *Geodetic* ({loc['name']})",
+            f"   ☀️ {geo['sun_deg']}° {geo['sun_sign']} {geo['sun_sym']}  "
+            f"🌙 {geo['moon_deg']}° {geo['moon_sign']} {geo['moon_sym']}",
+            f"   UDN *{geo['udn']}* ({geo['udn_group']}) → active *{active_geo}*",
+            f"🔯 *I-Ching* #{hex_num} {ching_inf['symbol']} {ching_inf['name']} → *{list(ching_d)}*",
         ]
         if geo["aspects"]:
             for asp in geo["aspects"]:
