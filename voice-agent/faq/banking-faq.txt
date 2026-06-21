@@ -1,0 +1,79 @@
+VIOX BANKING — FREQUENTLY ASKED QUESTIONS
+
+=== ACCOUNT SERVICES ===
+
+Q: How do I check my account balance?
+A: You can check your account balance by calling our voice agent line, using the mobile app, or visiting any Viox Bank branch. Through the voice agent, simply complete OTP verification and say "check my balance" or "what's my balance."
+
+Q: What is the daily transaction limit for my account?
+A: Standard accounts have a daily transaction limit of MYR 10,000 for online transfers and MYR 5,000 for ATM withdrawals. Premier accounts have higher limits of MYR 50,000 for online transfers. To request a limit increase, visit a branch with valid identification.
+
+Q: How do I update my contact information?
+A: Contact information updates must be done in person at any Viox Bank branch with two forms of identification, or via the official mobile app under Settings > Personal Information. For security, contact details cannot be updated over the phone.
+
+Q: What currencies does Viox Bank support?
+A: Viox Bank supports MYR (Malaysian Ringgit) as the primary currency. Foreign currency accounts are available for USD, EUR, SGD, GBP, AUD, and JPY. A minimum deposit of MYR 5,000 equivalent is required to open a foreign currency account.
+
+=== CARDS ===
+
+Q: How do I lock or freeze my debit or credit card?
+A: You can lock your card instantly through the voice agent by saying "lock my card," through the mobile app under Cards > Manage Card, or by calling our 24-hour hotline at 1800-88-VIOX. A locked card cannot be used for any transactions until unlocked.
+
+Q: How do I unlock my card?
+A: To unlock your card, use the voice agent and say "unlock my card," use the mobile app, or call our 24-hour hotline. You will need to complete OTP verification before any card status changes are made.
+
+Q: What should I do if my card is lost or stolen?
+A: Immediately lock your card via the voice agent or mobile app. Then report the loss to our 24-hour hotline at 1800-88-VIOX. We will cancel the card and issue a replacement within 5-7 business days. Emergency card delivery is available for an additional fee.
+
+Q: What are the interest rates for credit cards?
+A: Viox Bank credit cards carry a standard interest rate of 15% per annum (1.25% per month) on outstanding balances. The minimum monthly payment is 5% of the outstanding balance or MYR 50, whichever is higher. No interest is charged if the full balance is paid by the due date.
+
+Q: Is there a fee to replace a damaged card?
+A: Standard card replacement costs MYR 12. Premier account holders receive one free replacement per year. Emergency replacement (within 48 hours) costs MYR 50.
+
+=== LOANS ===
+
+Q: How do I check my loan balance and next payment date?
+A: Through the voice agent, complete verification and say "check my loan" or "loan balance." You can also check in the mobile app under Loans, or at any branch. Loan statements are sent monthly to your registered email.
+
+Q: What types of loans does Viox Bank offer?
+A: Viox Bank offers Personal Loans (up to MYR 150,000, tenure 1–5 years), Home Loans (up to MYR 2,000,000, tenure up to 35 years), Car Loans (up to MYR 500,000, tenure up to 9 years), and Business Loans (up to MYR 1,000,000, subject to assessment).
+
+Q: What is the interest rate for personal loans?
+A: Personal loans carry a flat rate of 5.5% to 8.5% per annum depending on credit assessment. The effective interest rate (EIR) ranges from 10% to 16% per annum. Final rates are confirmed upon loan approval.
+
+Q: Can I make early loan repayment?
+A: Yes. Early partial or full repayment is allowed. An early settlement fee of 1% of the outstanding principal applies for Personal and Car Loans settled within the first 2 years. Home Loans have no early settlement fee after year 3.
+
+Q: What happens if I miss a loan payment?
+A: A late payment fee of MYR 20 or 1% of the overdue amount (whichever is higher) will be charged. After 3 consecutive missed payments, your account may be referred to our collections team and your credit score may be affected. Contact us immediately if you anticipate payment difficulties.
+
+=== OPERATING HOURS & BRANCHES ===
+
+Q: What are Viox Bank's branch operating hours?
+A: Most Viox Bank branches are open Monday to Friday 9:00 AM – 4:30 PM, and Saturday 9:00 AM – 1:00 PM. Branches are closed on Sundays and public holidays. Some branches in shopping malls operate extended hours; check the Viox Bank website or app for specific branch hours.
+
+Q: Is Viox Bank's phone banking available 24 hours?
+A: Yes. The automated voice agent is available 24/7 for balance enquiries, card lock/unlock, and loan status. For complex queries requiring a human agent, service is available Monday to Saturday 8:00 AM – 10:00 PM, and Sunday 9:00 AM – 5:00 PM.
+
+=== ONLINE BANKING & SECURITY ===
+
+Q: How do I dispute a transaction I don't recognise?
+A: To dispute an unrecognised transaction, call our disputes hotline at 1800-88-FRAUD within 60 days of the transaction date, or submit a dispute form through the mobile app under Transactions > Report a Problem. Include the transaction date, amount, and merchant name. Investigation typically takes 5–14 business days.
+
+Q: What should I do if I receive a suspicious call or message claiming to be from Viox Bank?
+A: Viox Bank will never ask for your full PIN, OTP, or internet banking password over the phone or via SMS. If you receive such a request, end the call immediately and report it to our fraud hotline at 1800-88-FRAUD. Do not share any codes or passwords with anyone.
+
+Q: How does OTP verification work?
+A: When you call Viox Bank's voice agent, you will be asked to enter a One-Time Password (OTP) using your phone keypad. The OTP is sent to your registered mobile number and is valid for 2 minutes. You have a maximum of 3 attempts to enter the correct OTP. The OTP ensures only the registered account holder can access account information.
+
+Q: How secure is the voice agent?
+A: The voice agent uses DTMF (keypad) input for OTP entry — your OTP is never spoken aloud and is never processed by the AI. The AI assistant only knows whether your identity has been verified, not the OTP itself. All actions are logged in a full audit trail.
+
+=== FEES & CHARGES ===
+
+Q: Is there a monthly fee for a Viox Bank savings account?
+A: Standard savings accounts have no monthly fee. There is a low balance fee of MYR 10 per month if your account falls below MYR 500 for more than 30 consecutive days. Premier accounts (minimum MYR 50,000 balance) have no fees.
+
+Q: What are the fees for interbank transfers?
+A: Interbank transfers via IBG (Interbank GIRO) are free. Real-time transfers via DuitNow are free for amounts up to MYR 5,000 per day. Transfers above MYR 5,000 via DuitNow incur a fee of MYR 0.10 per transaction. Overseas wire transfers cost MYR 10 plus correspondent bank fees.
