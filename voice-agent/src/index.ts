@@ -7,6 +7,8 @@ import cardsRouter from "./api/cards";
 import loansRouter from "./api/loans";
 import otpRouter from "./api/otp";
 import faqRouter from "./api/faq";
+import agentRouter from "./api/agent";
+import auditRouter from "./api/audit";
 
 const app = express();
 app.use(express.json());
@@ -22,6 +24,9 @@ app.use("/api/cards", cardsRouter);
 app.use("/api/loans", loansRouter);
 app.use("/api/otp", otpRouter);
 app.use("/api/faq", faqRouter);
+app.use("/api/agent", agentRouter);
+app.use("/api/audit", auditRouter);
+app.use("/audit", auditRouter);
 
 const PORT = Number(process.env.PORT ?? 3000);
 app.listen(PORT, () => {

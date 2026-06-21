@@ -1,5 +1,6 @@
 import { AgentStateType, Turn } from "../state";
 import { chat, LlmMessage } from "../../services/llm";
+import { auditLog } from "../../audit/log";
 
 const SYSTEM_PROMPT = `You are a helpful, professional banking voice assistant for Viox Bank.
 You speak clearly and concisely — responses will be read aloud over a phone call, so keep them under 3 sentences.
@@ -38,7 +39,18 @@ export async function generateNode(state: AgentStateType): Promise<Partial<Agent
 
   messages.push({ role: "user", content: userContent });
 
+  const t0 = Date.now();
   const result = await chat(messages);
+  const llmMs = Date.now() - t0;
+
+  await auditLog("faq_queried", state.sessionId, state.accountId, {
+    route: state.route,
+    inputChars: state.userInput.length,
+    outputChars: result.text.length,
+    llmMs,
+    evalTokens: result.eval_count,
+    mocked: result.mocked ?? false,
+  }).catch(() => {/* non-fatal */});
 
   const newHistory: Turn[] = [
     { role: "user", content: state.userInput },

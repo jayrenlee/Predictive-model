@@ -13,7 +13,8 @@
     "db:down": "docker compose down",
     "test:api": "ts-node scripts/test-api.ts",
     "chat": "ts-node src/chat-loop.ts",
-    "chat:mock": "MOCK_AI=true ts-node src/chat-loop.ts"
+    "chat:mock": "MOCK_AI=true ts-node src/chat-loop.ts",
+    "audit": "ts-node scripts/view-audit.ts"
   },
   "dependencies": {
     "@langchain/core": "^1.2.0",
